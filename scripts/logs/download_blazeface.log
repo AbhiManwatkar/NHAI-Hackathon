@@ -1,0 +1,8 @@
+2026-05-28 18:33:56,257 [INFO] Downloading from: https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/latest/blaze_face_short_range.tflite
+2026-05-28 18:33:57,519 [INFO] Successfully downloaded BlazeFace TFLite model to: models\blazeface.tflite
+2026-05-28 18:33:57,533 [INFO] Computed SHA256 Checksum: b4578f35940bf5a1a655214a1cce5cab13eba73c1297cd78e1a04c2380b0152f
+2026-05-28 18:33:57,533 [WARNING] SHA256 checksum mismatch!
+  Expected: c18c2f5ee6f50bdf73df0169300b1a03a655214a1cce5cab13eba73c1297cd78
+  Computed: b4578f35940bf5a1a655214a1cce5cab13eba73c1297cd78e1a04c2380b0152f
+Note: This might be due to an upstream model update. Proceeding with caution...
+2026-05-28 18:33:57,534 [INFO] Model File Size: 0.22 MB (Target: ~0.8 MB)
