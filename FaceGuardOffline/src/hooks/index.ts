@@ -8,3 +8,5 @@
 export * from './useFaceEngine';
 export * from './useLiveness';
 export * from './useNetworkSync';
+export * from './useCameraEnrolment';
+export * from './useAttendanceRecognition';

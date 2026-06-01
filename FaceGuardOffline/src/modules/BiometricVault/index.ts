@@ -7,3 +7,4 @@
 
 export * from './crypto';
 export * from './VaultManager';
+export * from './VaultProvider';

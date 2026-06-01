@@ -10,3 +10,4 @@ export * from './LivenessChallenge';
 export * from './FaceFrame';
 export * from './SyncBanner';
 export * from './AttendanceCard';
+export * from './QualityIndicator';

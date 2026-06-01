@@ -1,236 +1,214 @@
-/**
- * @fileoverview AttendanceCard Component
- * @description Renders a beautifully styled list item representing a personnel attendance record.
- * Displays avatar icons, timestamps, matching confidence indicators, liveness badges,
- * and visual synchronization indicators to show eventual upload progress.
- *
- * @module components/AttendanceCard
- * @version 1.0.0
- */
-
 import React from 'react';
-import { StyleSheet, View, Text, Platform } from 'react-native';
-import Animated, { FadeInUp } from 'react-native-reanimated';
-import { AttendanceRecord } from '../../types';
+import { StyleSheet, View, Text, TouchableOpacity, Dimensions } from 'react-native';
+import Animated, {
+  SlideInDown,
+  SlideOutDown,
+} from 'react-native-reanimated';
 
-const Colors = {
-  primaryOrange: '#FF6B00',
-  primaryBlue: '#1A3C5E',
-  backgroundDark: '#0D1B2A',
-  surface: '#1B2838',
-  success: '#00C853',
-  error: '#FF1744',
-  warning: '#FFD600',
-  textPrimary: '#FFFFFF',
-  textSecondary: '#B0BEC5',
-  glassBorder: 'rgba(255, 255, 255, 0.08)',
-  glassBackground: 'rgba(27, 40, 56, 0.70)',
-};
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 export interface AttendanceCardProps {
-  /** The attendance item log */
-  record: AttendanceRecord;
-  /** Index for entrance animations */
-  index: number;
+  employee: {
+    name: string;
+    employee_code: string;
+    designation?: string | null;
+    department?: string | null;
+  } | null;
+  confidence: number;
+  livenessScore: number;
+  syncQueueCount: number;
+  onAction: (type: 'CHECK_IN' | 'CHECK_OUT') => void;
+  onDismiss: () => void;
 }
 
-export const AttendanceCard: React.FC<AttendanceCardProps> = ({ record, index }) => {
-  // Format dates
-  const formatTime = (isoString: string) => {
-    try {
-      const date = new Date(isoString);
-      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    } catch {
-      return '--:--';
-    }
-  };
+export const AttendanceCard: React.FC<AttendanceCardProps> = ({
+  employee,
+  confidence,
+  livenessScore,
+  syncQueueCount,
+  onAction,
+  onDismiss,
+}) => {
+  if (!employee) return null;
 
-  const formatDate = (isoString: string) => {
-    try {
-      const date = new Date(isoString);
-      return date.toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' });
-    } catch {
-      return '';
-    }
-  };
-
-  const confidencePct = Math.round(record.confidence * 100);
-  const livenessPct = Math.round(record.livenessScore * 100);
+  const initials = employee.name
+    .split(' ')
+    .map((n) => n[0])
+    .join('')
+    .substring(0, 2)
+    .toUpperCase();
 
   return (
-    <Animated.View entering={FadeInUp.delay(index * 80).duration(450)} style={styles.card}>
-      <View style={styles.avatarContainer}>
-        {/* Placeholder Avatar icon */}
-        <Text style={styles.avatarIcon}>👤</Text>
-      </View>
+    <View style={styles.backdrop}>
+      <TouchableOpacity style={styles.dismissOverlay} onPress={onDismiss} />
+      <Animated.View
+        entering={SlideInDown.duration(400)}
+        exiting={SlideOutDown.duration(300)}
+        style={styles.sheet}
+      >
+        <View style={styles.dragHandle} />
 
-      <View style={styles.infoContainer}>
-        <View style={styles.row}>
-          <Text style={styles.nameText} numberOfLines={1}>
-            {record.personnelName}
-          </Text>
-          {/* Sync indicator */}
-          <View style={styles.syncContainer}>
-            <Text style={styles.syncIcon}>{record.isSynced ? '☁️ ✅' : '💾'}</Text>
-            <Text style={[styles.syncText, record.isSynced && styles.syncedText]}>
-              {record.isSynced ? 'Cloud' : 'Offline'}
+        <View style={styles.header}>
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>{initials}</Text>
+          </View>
+          <View style={styles.employeeInfo}>
+            <Text style={styles.nameText}>{employee.name}</Text>
+            <Text style={styles.codeText}>{employee.employee_code}</Text>
+            <Text style={styles.subtext}>
+              {employee.designation || 'Field Agent'} • {employee.department || 'Operations'}
             </Text>
           </View>
         </View>
 
-        <View style={[styles.row, styles.metaRow]}>
-          <Text style={styles.timeText}>⏱️ {formatTime(record.timestamp)}</Text>
-          <Text style={styles.dateText}>📅 {formatDate(record.timestamp)}</Text>
+        <View style={styles.metricsContainer}>
+          <Text style={styles.metricLabel}>
+            Match Confidence: <Text style={styles.boldText}>{(confidence * 100).toFixed(1)}%</Text>
+          </Text>
+          <Text style={styles.metricLabel}>
+            Liveness Score: <Text style={styles.boldText}>{(livenessScore * 100).toFixed(1)}%</Text>
+          </Text>
         </View>
 
-        {/* Scoring Indicators */}
-        <View style={styles.scoresRow}>
-          <View style={styles.scoreItem}>
-            <Text style={styles.scoreLabel}>Match Match</Text>
-            <View style={styles.scoreTrack}>
-              <View
-                style={[
-                  styles.scoreBar,
-                  { width: `${confidencePct}%`, backgroundColor: Colors.primaryOrange },
-                ]}
-              />
-            </View>
-            <Text style={styles.scoreValue}>{confidencePct}%</Text>
-          </View>
-
-          <View style={styles.scoreItem}>
-            <Text style={styles.scoreLabel}>Liveness</Text>
-            <View style={styles.scoreTrack}>
-              <View
-                style={[
-                  styles.scoreBar,
-                  { width: `${livenessPct}%`, backgroundColor: Colors.success },
-                ]}
-              />
-            </View>
-            <Text style={styles.scoreValue}>{livenessPct}%</Text>
-          </View>
+        <View style={styles.offlineBadge}>
+          <Text style={styles.offlineBadgeText}>
+            💾 Saved locally — {syncQueueCount} records pending sync
+          </Text>
         </View>
-      </View>
-    </Animated.View>
+
+        <View style={styles.actionRow}>
+          <TouchableOpacity
+            style={[styles.actionBtn, styles.checkInBtn]}
+            onPress={() => onAction('CHECK_IN')}
+          >
+            <Text style={styles.btnText}>CHECK IN</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.actionBtn, styles.checkOutBtn]}
+            onPress={() => onAction('CHECK_OUT')}
+          >
+            <Text style={styles.btnText}>CHECK OUT</Text>
+          </TouchableOpacity>
+        </View>
+      </Animated.View>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
-  card: {
-    backgroundColor: Colors.glassBackground,
-    borderWidth: 1,
-    borderColor: Colors.glassBorder,
-    borderRadius: 16,
-    padding: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 10,
-    ...Platform.select({
-      android: { elevation: 2 },
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.15,
-        shadowRadius: 6,
-      },
-    }),
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+    justifyContent: 'flex-end',
+    zIndex: 999,
   },
-  avatarContainer: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  avatarIcon: {
-    fontSize: 22,
-  },
-  infoContainer: {
+  dismissOverlay: {
     flex: 1,
   },
-  row: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  sheet: {
+    backgroundColor: '#0F172A',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    paddingBottom: Platform.OS === 'ios' ? 40 : 24,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
-  metaRow: {
-    marginTop: 4,
-    marginBottom: 8,
+  dragHandle: {
+    width: 40,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    alignSelf: 'center',
+    marginBottom: 20,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  avatar: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#FF6B00',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 16,
+  },
+  avatarText: {
+    color: '#FFFFFF',
+    fontSize: 24,
+    fontWeight: '900',
+  },
+  employeeInfo: {
+    flex: 1,
   },
   nameText: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: Colors.textPrimary,
-    flex: 1,
-    marginRight: 8,
+    color: '#FFFFFF',
+    fontSize: 22,
+    fontWeight: '900',
   },
-  syncContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.04)',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
-  },
-  syncIcon: {
-    fontSize: 10,
-    marginRight: 4,
-  },
-  syncText: {
-    fontSize: 9,
+  codeText: {
+    color: '#FF6B00',
+    fontSize: 16,
     fontWeight: '700',
-    color: Colors.textSecondary,
+    marginTop: 2,
   },
-  syncedText: {
-    color: Colors.success,
+  subtext: {
+    color: '#94A3B8',
+    fontSize: 15,
+    marginTop: 2,
   },
-  timeText: {
-    fontSize: 11,
-    color: Colors.textSecondary,
-    fontWeight: '600',
+  metricsContainer: {
+    backgroundColor: 'rgba(26, 60, 94, 0.3)',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 16,
   },
-  dateText: {
-    fontSize: 11,
-    color: Colors.textSecondary,
-    fontWeight: '600',
+  metricLabel: {
+    color: '#94A3B8',
+    fontSize: 15,
+    marginVertical: 4,
   },
-  scoresRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 12,
+  boldText: {
+    color: '#FFFFFF',
+    fontWeight: '800',
   },
-  scoreItem: {
-    flex: 1,
-    flexDirection: 'row',
+  offlineBadge: {
+    backgroundColor: 'rgba(245, 158, 11, 0.15)',
+    padding: 12,
+    borderRadius: 8,
     alignItems: 'center',
+    marginBottom: 24,
   },
-  scoreLabel: {
-    fontSize: 9,
-    fontWeight: '800',
-    color: Colors.textSecondary,
-    width: 44,
+  offlineBadgeText: {
+    color: '#F59E0B',
+    fontSize: 15,
+    fontWeight: '700',
   },
-  scoreTrack: {
+  actionRow: {
+    flexDirection: 'row',
+    gap: 16,
+  },
+  actionBtn: {
     flex: 1,
-    height: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 2,
-    marginHorizontal: 6,
-    overflow: 'hidden',
+    height: 56, // Gloved hand usability height
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  scoreBar: {
-    height: '100%',
-    borderRadius: 2,
+  checkInBtn: {
+    backgroundColor: '#22C55E',
   },
-  scoreValue: {
-    fontSize: 9,
-    fontWeight: '800',
-    color: Colors.textPrimary,
-    width: 24,
-    textAlign: 'right',
+  checkOutBtn: {
+    backgroundColor: '#EF4444',
+  },
+  btnText: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '900',
   },
 });
 
