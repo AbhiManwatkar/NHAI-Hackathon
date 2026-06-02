@@ -25,14 +25,14 @@ FaceGuard Offline is designed as a **layered, modular architecture** that separa
 
 ### Design Goals
 
-| Goal | Strategy |
-|------|----------|
-| **Offline-First** | All critical paths function without network |
-| **Low Latency** | Sub-500ms end-to-end authentication |
-| **Security** | Defense-in-depth with hardware-backed encryption |
-| **Reliability** | Graceful degradation under resource pressure |
+| Goal                | Strategy                                          |
+| ------------------- | ------------------------------------------------- |
+| **Offline-First**   | All critical paths function without network       |
+| **Low Latency**     | Sub-500ms end-to-end authentication               |
+| **Security**        | Defense-in-depth with hardware-backed encryption  |
+| **Reliability**     | Graceful degradation under resource pressure      |
 | **Maintainability** | Clean module boundaries with dependency injection |
-| **Testability** | Every module testable in isolation |
+| **Testability**     | Every module testable in isolation                |
 
 ---
 
@@ -157,6 +157,7 @@ FaceEngine
 ```
 
 **Key Responsibilities:**
+
 - Load and manage TFLite model lifecycle
 - Preprocess camera frames for model input
 - Run inference on the dedicated ML thread
@@ -195,6 +196,7 @@ LivenessDetector
 ```
 
 **Key Responsibilities:**
+
 - Run passive liveness inference on every captured frame
 - Generate random active challenge sequences
 - Track challenge compliance with motion analysis
@@ -235,6 +237,7 @@ BiometricVault
 ```
 
 **Key Responsibilities:**
+
 - Encrypt biometric embeddings before storage
 - Manage SQLite database with encrypted columns
 - Interface with hardware keystore for key operations
@@ -275,6 +278,7 @@ SyncManager
 ```
 
 **Key Responsibilities:**
+
 - Queue authentication events for sync
 - Monitor network connectivity changes
 - Execute batch uploads with compression
@@ -438,11 +442,11 @@ Priority: Local Device (Primary) ──► Cloud Datalake (Replica)
 
 Every operation assumes it will succeed locally. Network sync is a background concern:
 
-| Operation | Local Behavior | Sync Behavior |
-|-----------|---------------|---------------|
-| Enrollment | Immediate local storage | Queued for upload |
-| Recognition | Local embedding search | Auth event queued |
-| Settings Change | Immediate local apply | Config sync on connect |
+| Operation       | Local Behavior          | Sync Behavior          |
+| --------------- | ----------------------- | ---------------------- |
+| Enrollment      | Immediate local storage | Queued for upload      |
+| Recognition     | Local embedding search  | Auth event queued      |
+| Settings Change | Immediate local apply   | Config sync on connect |
 
 ### 3. Conflict Resolution Strategy
 
@@ -531,13 +535,13 @@ Level 4: Storage Pressure
 
 ### Thread Communication
 
-| From → To | Mechanism | Data |
-|-----------|-----------|------|
-| Camera → ML | SharedArrayBuffer / Frame callback | Raw pixel buffer |
-| ML → JS | Promise resolution / Event emitter | Detection results |
-| JS → Crypto | TurboModule sync call | Embedding data |
-| JS → Sync | Background task API | Sync commands |
-| Sync → JS | Event emitter | Sync status updates |
+| From → To   | Mechanism                          | Data                |
+| ----------- | ---------------------------------- | ------------------- |
+| Camera → ML | SharedArrayBuffer / Frame callback | Raw pixel buffer    |
+| ML → JS     | Promise resolution / Event emitter | Detection results   |
+| JS → Crypto | TurboModule sync call              | Embedding data      |
+| JS → Sync   | Background task API                | Sync commands       |
+| Sync → JS   | Event emitter                      | Sync status updates |
 
 ### Critical Thread Rules
 
@@ -553,14 +557,14 @@ Level 4: Storage Pressure
 
 ### Memory Budget
 
-| Component | Budget | Strategy |
-|-----------|--------|----------|
-| TFLite Models (loaded) | ~45MB | Lazy load, share interpreters |
-| Camera Frame Buffer | ~12MB | Ring buffer, 3 frames max |
-| Embedding Cache | ~5MB | LRU cache, 1000 entries |
-| SQLite Working Set | ~10MB | Page cache limit |
-| React Native Runtime | ~40MB | Standard Hermes allocation |
-| **Total Target** | **<150MB** | **Fits in 4GB device** |
+| Component              | Budget     | Strategy                      |
+| ---------------------- | ---------- | ----------------------------- |
+| TFLite Models (loaded) | ~45MB      | Lazy load, share interpreters |
+| Camera Frame Buffer    | ~12MB      | Ring buffer, 3 frames max     |
+| Embedding Cache        | ~5MB       | LRU cache, 1000 entries       |
+| SQLite Working Set     | ~10MB      | Page cache limit              |
+| React Native Runtime   | ~40MB      | Standard Hermes allocation    |
+| **Total Target**       | **<150MB** | **Fits in 4GB device**        |
 
 ### Memory Lifecycle
 
@@ -626,12 +630,12 @@ onMemoryWarning(level):
 
 ### Error Classification
 
-| Category | Examples | Response |
-|----------|----------|----------|
-| **Recoverable** | Model inference timeout, DB write failure | Retry with backoff |
-| **Degraded** | Camera permission denied, low light | Prompt user action |
-| **Fatal** | Model file corrupted, keystore unavailable | Show error, require restart |
-| **Silent** | Sync failure (offline), non-critical log loss | Queue for later, continue |
+| Category        | Examples                                      | Response                    |
+| --------------- | --------------------------------------------- | --------------------------- |
+| **Recoverable** | Model inference timeout, DB write failure     | Retry with backoff          |
+| **Degraded**    | Camera permission denied, low light           | Prompt user action          |
+| **Fatal**       | Model file corrupted, keystore unavailable    | Show error, require restart |
+| **Silent**      | Sync failure (offline), non-critical log loss | Queue for later, continue   |
 
 ### Error Propagation
 
@@ -660,6 +664,38 @@ User Feedback
   ├── Modal for degraded
   └── Full-screen for fatal
 ```
+
+---
+
+## Offline-First State Contract
+
+FaceGuard Offline treats SQLite as the source of truth and uses Zustand only as a reactive UI cache over the vault. Network state never owns user-facing data.
+
+1. Every user action first writes to SQLite, then attempts network sync.
+2. UI always reads from SQLite-backed state and never waits for the network.
+3. Sync is async, background, and fire-and-forget from the field user's perspective.
+4. Network errors are silently queued and never surfaced to field users.
+5. The app boots and runs identically with or without internet.
+
+### State Ownership
+
+```
+Camera / Forms / Actions
+  |
+  v
+Zustand action
+  |
+  v
+VaultManager SQLite write
+  |
+  v
+Optimistic UI refresh from SQLite
+  |
+  v
+SyncManager background upload when possible
+```
+
+`useAppStore` exposes global UI state such as employees, attendance, sync status, online status, model readiness, spoof counts, and benchmark summary. `useEnrolmentStore` owns wizard-only capture state. `useRecognitionStore` owns the camera recognition state machine. None of these stores replace `VaultManager`; they hydrate from it and write through it.
 
 ---
 

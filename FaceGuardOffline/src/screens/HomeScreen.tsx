@@ -1,815 +1,462 @@
-/**
- * @fileoverview HomeScreen - FaceGuard Offline Dashboard
- * @description Main dashboard featuring glassmorphism-styled stat cards,
- * animated gradient header with NHAI branding, quick action buttons for
- * enrollment and recognition, and real-time sync status indicators.
- * All data is sourced from local storage for offline operation.
- * @version 1.0.0
- */
-
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Dimensions,
+  Animated as RNAnimated,
+  Easing,
   Platform,
-  RefreshControl,
+  Pressable,
   ScrollView,
   StatusBar,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
 } from 'react-native';
+import NetInfo from '@react-native-community/netinfo';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import LinearGradient from 'react-native-linear-gradient';
-import Animated, {
-  Easing,
-  FadeInDown,
-  FadeInUp,
-  interpolate,
-  useAnimatedStyle,
-  useSharedValue,
-  withDelay,
-  withRepeat,
-  withSequence,
-  withSpring,
-  withTiming,
-} from 'react-native-reanimated';
-import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import type { CompositeScreenProps } from '@react-navigation/native';
-import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
-import type { DashboardStats, MainTabParamList, RootStackParamList, SyncStatus } from '../types';
+import type { StackScreenProps } from '@react-navigation/stack';
+import { StatCard } from '../components/StatCard';
+import { Colors } from '../theme/colors';
+import type { RootStackParamList } from '../types';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Constants
-// ─────────────────────────────────────────────────────────────────────────────
+let MaterialIcon: any = null;
+try {
+  MaterialIcon = require('react-native-vector-icons/MaterialCommunityIcons').default;
+} catch (_error) {
+  MaterialIcon = null;
+}
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const CARD_MARGIN = 12;
-const CARD_WIDTH = (SCREEN_WIDTH - CARD_MARGIN * 3) / 2;
+type HomeScreenProps = StackScreenProps<RootStackParamList, 'Home'>;
 
-/** NHAI Brand Colors */
-const Colors = {
-  primaryOrange: '#FF6B00',
-  primaryBlue: '#1A3C5E',
-  backgroundDark: '#0D1B2A',
-  surface: '#1B2838',
-  success: '#00C853',
-  error: '#FF1744',
-  warning: '#FFD600',
-  textPrimary: '#FFFFFF',
-  textSecondary: '#B0BEC5',
-  glassBorder: 'rgba(255, 255, 255, 0.12)',
-  glassBackground: 'rgba(27, 40, 56, 0.65)',
-  cardGlow: 'rgba(255, 107, 0, 0.15)',
-} as const;
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Navigation Typing
-// ─────────────────────────────────────────────────────────────────────────────
-
-type HomeScreenProps = CompositeScreenProps<
-  BottomTabScreenProps<MainTabParamList, 'Home'>,
-  NativeStackScreenProps<RootStackParamList>
->;
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Sub-components
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Animated pulsing sync indicator dot
- * @param props.isConnected - Whether the device is currently connected
- */
-const SyncIndicator: React.FC<{ isConnected: boolean }> = ({ isConnected }) => {
-  const pulseAnim = useSharedValue(1);
-
-  useEffect(() => {
-    if (isConnected) {
-      pulseAnim.value = withRepeat(
-        withSequence(
-          withTiming(1.3, { duration: 800, easing: Easing.inOut(Easing.ease) }),
-          withTiming(1, { duration: 800, easing: Easing.inOut(Easing.ease) }),
-        ),
-        -1,
-        false,
-      );
-    } else {
-      pulseAnim.value = withTiming(1, { duration: 300 });
-    }
-  }, [isConnected, pulseAnim]);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: pulseAnim.value }],
-  }));
-
-  return (
-    <View style={styles.syncIndicatorContainer}>
-      <Animated.View
-        style={[
-          styles.syncDot,
-          { backgroundColor: isConnected ? Colors.success : Colors.error },
-          animatedStyle,
-        ]}
-      />
-      <Text style={styles.syncLabel}>{isConnected ? 'Online' : 'Offline'}</Text>
-    </View>
-  );
+const appConfig = {
+  siteName: 'NH-48 Toll Plaza, Jaipur Corridor',
 };
 
-/**
- * Glassmorphism-styled statistics card with animated entrance
- * @param props.title - Card title label
- * @param props.value - Display value (count or status text)
- * @param props.subtitle - Secondary text below the value
- * @param props.icon - Emoji/text icon placeholder
- * @param props.accentColor - Left border accent color
- * @param props.index - Card index for staggered animation
- */
-const StatCard: React.FC<{
-  title: string;
-  value: string | number;
-  subtitle: string;
-  icon: string;
-  accentColor: string;
-  index: number;
-}> = ({ title, value, subtitle, icon, accentColor, index }) => {
-  return (
-    <Animated.View
-      entering={FadeInDown.delay(200 + index * 100)
-        .duration(500)
-        .springify()
-        .damping(15)}
-      style={[styles.statCard, { borderLeftColor: accentColor }]}
-    >
-      <View style={styles.statCardInner}>
-        <View style={styles.statIconContainer}>
-          <Text style={styles.statIcon}>{icon}</Text>
-        </View>
-        <Text style={styles.statTitle}>{title}</Text>
-        <Text style={[styles.statValue, { color: accentColor }]}>{value}</Text>
-        <Text style={styles.statSubtitle}>{subtitle}</Text>
-      </View>
-    </Animated.View>
-  );
+const dashboard = {
+  enrolledStaff: 42,
+  todayCheckIns: 31,
+  pendingSync: 5,
+  spoofAttempts: 2,
+  vaultRecords: 23,
+  vaultSize: '1.2 MB',
+  lastSyncAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
 };
 
-/**
- * Quick action button with gradient background
- * @param props.title - Button label
- * @param props.subtitle - Button description
- * @param props.icon - Emoji/text icon placeholder
- * @param props.gradientColors - LinearGradient color stops
- * @param props.onPress - Press handler
- * @param props.index - Button index for staggered animation
- */
-const ActionButton: React.FC<{
-  title: string;
-  subtitle: string;
-  icon: string;
-  gradientColors: string[];
-  onPress: () => void;
-  index: number;
-}> = ({ title, subtitle, icon, gradientColors, onPress, index }) => {
-  const scaleAnim = useSharedValue(1);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scaleAnim.value }],
-  }));
-
-  const handlePressIn = useCallback(() => {
-    scaleAnim.value = withSpring(0.95, { damping: 15, stiffness: 200 });
-  }, [scaleAnim]);
-
-  const handlePressOut = useCallback(() => {
-    scaleAnim.value = withSpring(1, { damping: 15, stiffness: 200 });
-  }, [scaleAnim]);
-
-  return (
-    <Animated.View
-      entering={FadeInDown.delay(500 + index * 150)
-        .duration(500)
-        .springify()
-        .damping(15)}
-    >
-      <TouchableOpacity
-        activeOpacity={0.9}
-        onPress={onPress}
-        onPressIn={handlePressIn}
-        onPressOut={handlePressOut}
-      >
-        <Animated.View style={animatedStyle}>
-          <LinearGradient
-            colors={gradientColors}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.actionButton}
-          >
-            <Text style={styles.actionIcon}>{icon}</Text>
-            <View style={styles.actionTextContainer}>
-              <Text style={styles.actionTitle}>{title}</Text>
-              <Text style={styles.actionSubtitle}>{subtitle}</Text>
-            </View>
-            <Text style={styles.actionArrow}>›</Text>
-          </LinearGradient>
-        </Animated.View>
-      </TouchableOpacity>
-    </Animated.View>
+const Icon: React.FC<{ name: string; color: string; size?: number }> = ({
+  name,
+  color,
+  size = 24,
+}) =>
+  MaterialIcon ? (
+    <MaterialIcon name={name} color={color} size={size} />
+  ) : (
+    <Text style={{ color, fontSize: Math.max(12, size - 9), fontWeight: '900' }}>
+      {name.slice(0, 2).toUpperCase()}
+    </Text>
   );
-};
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Main Component
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * HomeScreen - Main dashboard for FaceGuard Offline
- *
- * Displays:
- * - Animated gradient header with NHAI branding and sync status
- * - Glassmorphism stat cards: enrolled count, attendance, sync status
- * - Quick action buttons for enrollment and recognition
- * - Pull-to-refresh for data reload
- *
- * All data is loaded from local SQLite/encrypted storage.
- */
 const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
-  // ── State ──────────────────────────────────────────────────────────────
-  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
-  const [dashboardStats, setDashboardStats] = useState<DashboardStats>({
-    totalEnrolled: 0,
-    todayAttendance: 0,
-    syncStatus: {
-      isConnected: false,
-      isSyncing: false,
-      pendingCount: 0,
-      failedCount: 0,
-      completedCount: 0,
-      lastSuccessfulSync: null,
-      progress: 0,
-      currentError: null,
-      uploadSpeedBps: 0,
-    },
-    lastSyncTime: null,
-  });
-
-  // ── Animations ─────────────────────────────────────────────────────────
-  const headerAnim = useSharedValue(0);
+  const [now, setNow] = useState(new Date());
+  const [isOnline, setIsOnline] = useState(false);
+  const [showSyncBanner, setShowSyncBanner] = useState(false);
+  const [syncProgress, setSyncProgress] = useState(0);
+  const bannerTranslate = useMemo(() => new RNAnimated.Value(-90), []);
 
   useEffect(() => {
-    headerAnim.value = withTiming(1, {
-      duration: 1000,
-      easing: Easing.out(Easing.cubic),
-    });
-  }, [headerAnim]);
-
-  const headerAnimatedStyle = useAnimatedStyle(() => ({
-    opacity: headerAnim.value,
-    transform: [
-      {
-        translateY: interpolate(headerAnim.value, [0, 1], [-30, 0]),
-      },
-    ],
-  }));
-
-  // ── Data Loading ───────────────────────────────────────────────────────
-
-  /**
-   * Loads dashboard statistics from local storage.
-   * In production, this would query SQLite and the sync engine.
-   */
-  const loadDashboardData = useCallback(async (): Promise<void> => {
-    try {
-      // TODO: Replace with actual data layer calls
-      // const personnelCount = await PersonnelDB.getActiveCount();
-      // const todayAttendance = await AttendanceDB.getTodayCount();
-      // const syncStatus = await SyncEngine.getStatus();
-      setDashboardStats({
-        totalEnrolled: 24,
-        todayAttendance: 18,
-        syncStatus: {
-          isConnected: false,
-          isSyncing: false,
-          pendingCount: 3,
-          failedCount: 0,
-          completedCount: 42,
-          lastSuccessfulSync: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-          progress: 0,
-          currentError: null,
-          uploadSpeedBps: 0,
-        },
-        lastSyncTime: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-      });
-    } catch (error) {
-      console.error('[HomeScreen] Failed to load dashboard data:', error);
-    }
+    const clock = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(clock);
   }, []);
 
   useEffect(() => {
-    loadDashboardData();
-  }, [loadDashboardData]);
+    const unsubscribe = NetInfo.addEventListener((state) => {
+      const connected = Boolean(state.isConnected && state.isInternetReachable !== false);
+      setIsOnline((previous) => {
+        if (!previous && connected && dashboard.pendingSync > 0) {
+          setShowSyncBanner(true);
+          setSyncProgress(0);
+        }
+        return connected;
+      });
+    });
+    return unsubscribe;
+  }, []);
 
-  // ── Handlers ───────────────────────────────────────────────────────────
-
-  const handleRefresh = useCallback(async () => {
-    setIsRefreshing(true);
-    await loadDashboardData();
-    setIsRefreshing(false);
-  }, [loadDashboardData]);
-
-  const navigateToEnrolment = useCallback(() => {
-    navigation.navigate('Enrolment');
-  }, [navigation]);
-
-  const navigateToRecognition = useCallback(() => {
-    navigation.navigate('Recognition');
-  }, [navigation]);
-
-  const navigateToSyncStatus = useCallback(() => {
-    navigation.navigate('SyncStatus');
-  }, [navigation]);
-
-  // ── Helpers ────────────────────────────────────────────────────────────
-
-  /**
-   * Formats an ISO timestamp into a human-readable relative time string.
-   * @param isoTimestamp - ISO 8601 timestamp string
-   * @returns Formatted relative time (e.g., "2h ago", "Just now")
-   */
-  const formatRelativeTime = (isoTimestamp: string | null): string => {
-    if (!isoTimestamp) {
-      return 'Never';
+  useEffect(() => {
+    if (!showSyncBanner) {
+      return;
     }
-    const diff = Date.now() - new Date(isoTimestamp).getTime();
-    const minutes = Math.floor(diff / 60000);
-    if (minutes < 1) {
-      return 'Just now';
-    }
-    if (minutes < 60) {
-      return `${minutes}m ago`;
-    }
-    const hours = Math.floor(minutes / 60);
-    if (hours < 24) {
-      return `${hours}h ago`;
-    }
-    const days = Math.floor(hours / 24);
-    return `${days}d ago`;
-  };
 
-  /**
-   * Returns a sync status display string based on current state
-   */
-  const getSyncStatusText = (syncStatus: SyncStatus): string => {
-    if (syncStatus.isSyncing) {
-      return 'Syncing...';
-    }
-    if (syncStatus.pendingCount > 0) {
-      return `${syncStatus.pendingCount} Pending`;
-    }
-    if (syncStatus.failedCount > 0) {
-      return `${syncStatus.failedCount} Failed`;
-    }
-    return 'Up to date';
-  };
+    RNAnimated.timing(bannerTranslate, {
+      toValue: 0,
+      duration: 360,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
 
-  // ── Render ─────────────────────────────────────────────────────────────
+    const progressTimer = setInterval(() => {
+      setSyncProgress((previous) => {
+        const next = Math.min(previous + 0.14, 1);
+        if (next >= 1) {
+          clearInterval(progressTimer);
+          setTimeout(() => {
+            RNAnimated.timing(bannerTranslate, {
+              toValue: -90,
+              duration: 260,
+              easing: Easing.in(Easing.cubic),
+              useNativeDriver: true,
+            }).start(() => setShowSyncBanner(false));
+          }, 650);
+        }
+        return next;
+      });
+    }, 260);
+
+    return () => clearInterval(progressTimer);
+  }, [bannerTranslate, showSyncBanner]);
+
+  const formattedDate = now.toLocaleDateString('en-IN', {
+    weekday: 'short',
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+
+  const formattedTime = now.toLocaleTimeString('en-IN', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+
+  const lastSyncText = dashboard.lastSyncAt ? 'Last sync: 2h ago' : 'Never synced';
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <StatusBar
-        barStyle="light-content"
-        backgroundColor={Colors.backgroundDark}
-        translucent={false}
-      />
+      <StatusBar barStyle="light-content" backgroundColor={Colors.ui.background} />
 
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={isRefreshing}
-            onRefresh={handleRefresh}
-            tintColor={Colors.primaryOrange}
-            colors={[Colors.primaryOrange]}
-            progressBackgroundColor={Colors.surface}
-          />
-        }
-      >
-        {/* ── Animated Gradient Header ─────────────────────────────────── */}
-        <Animated.View style={headerAnimatedStyle}>
-          <LinearGradient
-            colors={[Colors.primaryBlue, Colors.backgroundDark]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.header}
-          >
-            <View style={styles.headerTop}>
-              <View style={styles.logoArea}>
-                <View style={styles.logoPlaceholder}>
-                  <Text style={styles.logoText}>NHAI</Text>
-                </View>
-                <View style={styles.headerTitleContainer}>
-                  <Text style={styles.headerTitle}>FaceGuard</Text>
-                  <Text style={styles.headerSubtitle}>Offline Authentication System</Text>
-                </View>
-              </View>
-              <TouchableOpacity
-                onPress={navigateToSyncStatus}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <SyncIndicator isConnected={dashboardStats.syncStatus.isConnected} />
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.headerGreeting}>
-              <Text style={styles.greetingText}>{getGreeting()}, Officer</Text>
-              <Text style={styles.dateText}>
-                {new Date().toLocaleDateString('en-IN', {
-                  weekday: 'long',
-                  day: 'numeric',
-                  month: 'long',
-                  year: 'numeric',
-                })}
-              </Text>
-            </View>
-          </LinearGradient>
-        </Animated.View>
-
-        {/* ── Statistics Cards ─────────────────────────────────────────── */}
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Dashboard Overview</Text>
-        </View>
-
-        <View style={styles.statsGrid}>
-          <StatCard
-            title="Enrolled"
-            value={dashboardStats.totalEnrolled}
-            subtitle="Total Personnel"
-            icon="👥"
-            accentColor={Colors.primaryOrange}
-            index={0}
-          />
-          <StatCard
-            title="Today"
-            value={dashboardStats.todayAttendance}
-            subtitle="Attendance"
-            icon="📋"
-            accentColor={Colors.success}
-            index={1}
-          />
-          <StatCard
-            title="Sync"
-            value={getSyncStatusText(dashboardStats.syncStatus)}
-            subtitle={`Last: ${formatRelativeTime(dashboardStats.lastSyncTime)}`}
-            icon="🔄"
-            accentColor={
-              dashboardStats.syncStatus.pendingCount > 0 ? Colors.warning : Colors.success
-            }
-            index={2}
-          />
-          <StatCard
-            title="Accuracy"
-            value="98.5%"
-            subtitle="Match Rate"
-            icon="🎯"
-            accentColor={Colors.primaryBlue}
-            index={3}
-          />
-        </View>
-
-        {/* ── Quick Actions ───────────────────────────────────────────── */}
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Quick Actions</Text>
-        </View>
-
-        <View style={styles.actionsContainer}>
-          <ActionButton
-            title="New Enrolment"
-            subtitle="Register new personnel with face capture"
-            icon="📸"
-            gradientColors={[Colors.primaryOrange, '#FF8F00']}
-            onPress={navigateToEnrolment}
-            index={0}
-          />
-          <ActionButton
-            title="Face Recognition"
-            subtitle="Authenticate and record attendance"
-            icon="🔍"
-            gradientColors={[Colors.primaryBlue, '#2A5A8E']}
-            onPress={navigateToRecognition}
-            index={1}
-          />
-          <ActionButton
-            title="Sync Status"
-            subtitle={`${dashboardStats.syncStatus.pendingCount} items pending sync`}
-            icon="☁️"
-            gradientColors={['#1B3A4B', '#2A5A6E']}
-            onPress={navigateToSyncStatus}
-            index={2}
-          />
-        </View>
-
-        {/* ── Recent Activity Placeholder ─────────────────────────────── */}
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Recent Activity</Text>
-          <TouchableOpacity>
-            <Text style={styles.seeAllText}>See All</Text>
-          </TouchableOpacity>
-        </View>
-
-        <Animated.View
-          entering={FadeInUp.delay(800).duration(400)}
-          style={styles.recentActivityCard}
+      {showSyncBanner ? (
+        <RNAnimated.View
+          style={[styles.syncBanner, { transform: [{ translateY: bannerTranslate }] }]}
         >
-          <Text style={styles.emptyStateIcon}>📝</Text>
-          <Text style={styles.emptyStateText}>Recent attendance records will appear here</Text>
-          <Text style={styles.emptyStateSubtext}>
-            Use Face Recognition to start recording attendance
-          </Text>
-        </Animated.View>
+          <View style={styles.syncBannerTop}>
+            <Icon name="cloud-sync" color={Colors.text.primary} size={20} />
+            <Text style={styles.syncBannerText}>
+              Connected - syncing {dashboard.pendingSync} records...
+            </Text>
+          </View>
+          <View style={styles.progressTrack}>
+            <View style={[styles.progressFill, { width: `${syncProgress * 100}%` }]} />
+          </View>
+        </RNAnimated.View>
+      ) : null}
 
-        {/* Bottom spacing */}
-        <View style={styles.bottomSpacer} />
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <View style={styles.hero}>
+          <View style={styles.brandRow}>
+            <View style={styles.logo}>
+              <Text style={styles.logoText}>NHAI</Text>
+            </View>
+            <View style={styles.wordmark}>
+              <Text style={styles.title}>FaceGuard Offline</Text>
+              <Text style={styles.siteName}>{appConfig.siteName}</Text>
+            </View>
+          </View>
+
+          <View style={styles.metaRow}>
+            <View>
+              <Text style={styles.date}>{formattedDate}</Text>
+              <Text style={styles.time}>{formattedTime}</Text>
+            </View>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => navigation.navigate('SyncStatus')}
+              style={[
+                styles.networkChip,
+                { backgroundColor: isOnline ? Colors.status.success : Colors.status.warning },
+              ]}
+            >
+              <View style={styles.chipDot} />
+              <Text style={styles.networkText}>{isOnline ? 'ONLINE' : 'OFFLINE'}</Text>
+            </Pressable>
+          </View>
+        </View>
+
+        <View style={styles.statGrid}>
+          <StatCard
+            title="Enrolled Staff"
+            value={dashboard.enrolledStaff}
+            icon="account-group"
+            variant="blue"
+            subtitle="Active face profiles"
+            onPress={() => navigation.navigate('Admin')}
+          />
+          <StatCard
+            title="Today's Check-ins"
+            value={dashboard.todayCheckIns}
+            icon="check-circle"
+            variant="green"
+            subtitle="Verified locally"
+            onPress={() => navigation.navigate('AttendanceLog')}
+          />
+          <StatCard
+            title="Pending Sync"
+            value={dashboard.pendingSync}
+            icon="cloud-upload"
+            variant="orange"
+            subtitle="Queued for AWS"
+            pulse
+            onPress={() => navigation.navigate('SyncStatus')}
+          />
+          <StatCard
+            title="Spoof Attempts"
+            value={dashboard.spoofAttempts}
+            icon="shield-alert"
+            variant="red"
+            subtitle="Blocked today"
+            pulse
+            onPress={() => navigation.navigate('Admin')}
+          />
+        </View>
+
+        <View style={styles.actions}>
+          <ActionButton
+            label="Mark Attendance"
+            icon="face-recognition"
+            tone="primary"
+            onPress={() => navigation.navigate('Recognition')}
+          />
+          <ActionButton
+            label="Enrol New Staff"
+            icon="account-plus"
+            tone="secondary"
+            onPress={() => navigation.navigate('Enrolment')}
+          />
+          <ActionButton
+            label="Attendance Log"
+            icon="format-list-bulleted"
+            tone="surface"
+            onPress={() => navigation.navigate('AttendanceLog')}
+          />
+          <ActionButton
+            label="Admin Panel"
+            icon="shield-account"
+            tone="surface"
+            onPress={() => navigation.navigate('Admin')}
+          />
+        </View>
+
+        <View style={styles.statusBar}>
+          <StatusItem icon="brain" text="AI Models: Ready (3/3)" />
+          <StatusItem
+            icon="database-lock"
+            text={`Vault: ${dashboard.vaultRecords} records | ${dashboard.vaultSize}`}
+          />
+          <StatusItem icon="history" text={lastSyncText} />
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Helper Functions
-// ─────────────────────────────────────────────────────────────────────────────
+const ActionButton: React.FC<{
+  label: string;
+  icon: string;
+  tone: 'primary' | 'secondary' | 'surface';
+  onPress: () => void;
+}> = ({ label, icon, tone, onPress }) => {
+  const background =
+    tone === 'primary'
+      ? Colors.brand.primary
+      : tone === 'secondary'
+      ? Colors.brand.dark
+      : Colors.ui.surfaceHigh;
 
-/**
- * Returns a time-appropriate greeting string.
- * @returns Greeting text based on current hour
- */
-function getGreeting(): string {
-  const hour = new Date().getHours();
-  if (hour < 12) {
-    return 'Good Morning';
-  }
-  if (hour < 17) {
-    return 'Good Afternoon';
-  }
-  return 'Good Evening';
-}
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      android_ripple={{ color: '#ffffff18' }}
+      style={({ pressed }) => [
+        styles.actionButton,
+        { backgroundColor: background, opacity: pressed ? 0.86 : 1 },
+      ]}
+    >
+      <View style={styles.actionIcon}>
+        <Icon name={icon} color={Colors.text.primary} size={25} />
+      </View>
+      <Text style={styles.actionLabel}>{label}</Text>
+      <Icon name="chevron-right" color={Colors.text.primary} size={21} />
+    </Pressable>
+  );
+};
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Styles
-// ─────────────────────────────────────────────────────────────────────────────
+const StatusItem: React.FC<{ icon: string; text: string }> = ({ icon, text }) => (
+  <View style={styles.statusItem}>
+    <Icon name={icon} color={Colors.brand.light} size={17} />
+    <Text style={styles.statusText}>{text}</Text>
+  </View>
+);
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.backgroundDark,
+    backgroundColor: Colors.ui.background,
   },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingBottom: 20,
-  },
-
-  // Header
-  header: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 24,
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
-  },
-  headerTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  logoArea: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  logoPlaceholder: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    backgroundColor: Colors.primaryOrange,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-    ...Platform.select({
-      android: { elevation: 4 },
-      ios: {
-        shadowColor: Colors.primaryOrange,
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.4,
-        shadowRadius: 4,
-      },
-    }),
-  },
-  logoText: {
-    fontSize: 12,
-    fontWeight: '900',
-    color: Colors.textPrimary,
-    letterSpacing: 1,
-  },
-  headerTitleContainer: {
-    justifyContent: 'center',
-  },
-  headerTitle: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: Colors.textPrimary,
-    letterSpacing: 0.5,
-  },
-  headerSubtitle: {
-    fontSize: 11,
-    color: Colors.textSecondary,
-    marginTop: 2,
-    letterSpacing: 0.3,
-  },
-  headerGreeting: {
-    marginTop: 4,
-  },
-  greetingText: {
-    fontSize: 26,
-    fontWeight: '700',
-    color: Colors.textPrimary,
-  },
-  dateText: {
-    fontSize: 14,
-    color: Colors.textSecondary,
-    marginTop: 4,
-  },
-
-  // Sync Indicator
-  syncIndicatorContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-  },
-  syncDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginRight: 6,
-  },
-  syncLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: Colors.textSecondary,
-  },
-
-  // Section Headers
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    marginTop: 24,
-    marginBottom: 12,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: Colors.textPrimary,
-    letterSpacing: 0.3,
-  },
-  seeAllText: {
-    fontSize: 14,
-    color: Colors.primaryOrange,
-    fontWeight: '600',
-  },
-
-  // Statistics Grid
-  statsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    paddingHorizontal: CARD_MARGIN,
-    gap: CARD_MARGIN,
-  },
-  statCard: {
-    width: CARD_WIDTH,
-    backgroundColor: Colors.glassBackground,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: Colors.glassBorder,
-    borderLeftWidth: 3,
-    overflow: 'hidden',
-    ...Platform.select({
-      android: { elevation: 2 },
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.2,
-        shadowRadius: 8,
-      },
-    }),
-  },
-  statCardInner: {
+  content: {
     padding: 16,
+    paddingBottom: 34,
+    gap: 18,
   },
-  statIconContainer: {
-    marginBottom: 8,
+  syncBanner: {
+    position: 'absolute',
+    zIndex: 10,
+    top: Platform.OS === 'android' ? 10 : 4,
+    left: 16,
+    right: 16,
+    padding: 14,
+    borderRadius: 8,
+    backgroundColor: Colors.brand.dark,
+    borderWidth: 1,
+    borderColor: Colors.brand.primary,
   },
-  statIcon: {
-    fontSize: 24,
+  syncBannerTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 10,
   },
-  statTitle: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: Colors.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-    marginBottom: 4,
-  },
-  statValue: {
-    fontSize: 28,
+  syncBannerText: {
+    color: Colors.text.primary,
     fontWeight: '800',
-    marginBottom: 4,
+    fontSize: 14,
   },
-  statSubtitle: {
-    fontSize: 11,
-    color: Colors.textSecondary,
+  progressTrack: {
+    height: 5,
+    borderRadius: 4,
+    overflow: 'hidden',
+    backgroundColor: '#ffffff22',
   },
-
-  // Action Buttons
-  actionsContainer: {
-    paddingHorizontal: 20,
+  progressFill: {
+    height: '100%',
+    borderRadius: 4,
+    backgroundColor: Colors.brand.primary,
+  },
+  hero: {
+    padding: 18,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Colors.ui.border,
+    backgroundColor: Colors.ui.surface,
+  },
+  brandRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 12,
   },
-  actionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 18,
-    paddingHorizontal: 20,
-    borderRadius: 16,
-    ...Platform.select({
-      android: { elevation: 4 },
-      ios: {
-        shadowColor: Colors.primaryOrange,
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.2,
-        shadowRadius: 8,
-      },
-    }),
-  },
-  actionIcon: {
-    fontSize: 28,
-    marginRight: 16,
-  },
-  actionTextContainer: {
-    flex: 1,
-  },
-  actionTitle: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: Colors.textPrimary,
-    marginBottom: 2,
-  },
-  actionSubtitle: {
-    fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.75)',
-  },
-  actionArrow: {
-    fontSize: 28,
-    color: 'rgba(255, 255, 255, 0.6)',
-    fontWeight: '300',
-  },
-
-  // Recent Activity
-  recentActivityCard: {
-    marginHorizontal: 20,
-    backgroundColor: Colors.glassBackground,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: Colors.glassBorder,
-    paddingVertical: 32,
+  logo: {
+    width: 58,
+    height: 58,
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: Colors.brand.primary,
   },
-  emptyStateIcon: {
-    fontSize: 36,
-    marginBottom: 12,
+  logoText: {
+    color: Colors.text.primary,
+    fontWeight: '900',
+    fontSize: 14,
   },
-  emptyStateText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: Colors.textSecondary,
-    marginBottom: 4,
+  wordmark: {
+    flex: 1,
   },
-  emptyStateSubtext: {
+  title: {
+    color: Colors.text.primary,
+    fontSize: 24,
+    fontWeight: '900',
+  },
+  siteName: {
+    color: Colors.text.secondary,
+    fontSize: 13,
+    fontWeight: '700',
+    marginTop: 4,
+  },
+  metaRow: {
+    marginTop: 18,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  date: {
+    color: Colors.text.secondary,
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  time: {
+    color: Colors.text.primary,
+    fontSize: 28,
+    fontWeight: '900',
+    marginTop: 2,
+  },
+  networkChip: {
+    minHeight: 36,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+  },
+  chipDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: Colors.text.primary,
+  },
+  networkText: {
+    color: Colors.text.primary,
+    fontWeight: '900',
     fontSize: 12,
-    color: 'rgba(176, 190, 197, 0.6)',
-    textAlign: 'center',
-    paddingHorizontal: 40,
   },
-
-  // Spacing
-  bottomSpacer: {
-    height: 100,
+  statGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  actions: {
+    gap: 10,
+  },
+  actionButton: {
+    minHeight: 64,
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  actionIcon: {
+    width: 34,
+    alignItems: 'center',
+  },
+  actionLabel: {
+    flex: 1,
+    color: Colors.text.primary,
+    fontWeight: '900',
+    fontSize: 16,
+  },
+  statusBar: {
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Colors.ui.border,
+    backgroundColor: Colors.ui.surface,
+    padding: 14,
+    gap: 10,
+  },
+  statusItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 9,
+  },
+  statusText: {
+    color: Colors.text.secondary,
+    fontWeight: '800',
+    fontSize: 12,
   },
 });
 

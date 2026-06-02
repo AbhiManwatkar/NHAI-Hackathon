@@ -11,3 +11,4 @@ export * from './FaceFrame';
 export * from './SyncBanner';
 export * from './AttendanceCard';
 export * from './QualityIndicator';
+export * from './StatCard';

@@ -12,7 +12,10 @@
 
 /** Root stack navigator parameter list for type-safe navigation */
 export type RootStackParamList = {
+  Home: undefined;
   MainTabs: undefined;
+  AttendanceLog: undefined;
+  Admin: undefined;
   Enrolment: { editPersonnelId?: string } | undefined;
   Recognition: undefined;
   SyncStatus: undefined;

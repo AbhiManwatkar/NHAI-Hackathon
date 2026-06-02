@@ -1,57 +1,93 @@
-/**
- * @fileoverview AppNavigator - Central Navigation Hub
- * @description Configures the root stack navigator for the FaceGuard Offline application
- * using @react-navigation/stack, defining transition behaviors and screen options.
- *
- * @module navigation/AppNavigator
- * @version 1.0.0
- */
-
 import React from 'react';
-import { createStackNavigator, CardStyleInterpolators } from '@react-navigation/stack';
+import { Text, TouchableOpacity } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
-import { RootStackParamList } from '../types';
+import { createStackNavigator, CardStyleInterpolators } from '@react-navigation/stack';
+import { Colors } from '../theme/colors';
+import type { RootStackParamList } from '../types';
 
-// Screens
-import MainTabsScreen from '../screens/MainTabsScreen';
+import AdminScreen from '../screens/AdminScreen';
+import AttendanceLogScreen from '../screens/AttendanceLogScreen';
 import EnrolmentScreen from '../screens/EnrolmentScreen';
+import HomeScreen from '../screens/HomeScreen';
 import RecognitionScreen from '../screens/RecognitionScreen';
 import SyncStatusScreen from '../screens/SyncStatusScreen';
 
 const Stack = createStackNavigator<RootStackParamList>();
 
-/**
- * Root Stack Navigator containing the main bottom tabs and full-screen screens
- * like Enrolment and Recognition, configured with smooth hardware-accelerated transitions.
- */
+const customHeaderOptions = (title: string, rightAction?: React.ReactNode) => ({
+  headerShown: true,
+  headerStyle: {
+    backgroundColor: Colors.brand.dark,
+    elevation: 0,
+    shadowOpacity: 0,
+  },
+  headerTintColor: Colors.text.primary,
+  headerTitle: title,
+  headerTitleStyle: {
+    color: Colors.text.primary,
+    fontSize: 18,
+    fontWeight: '800' as const,
+  },
+  headerBackTitleVisible: false,
+  headerBackImage: () => (
+    <Text style={{ color: Colors.brand.primary, fontSize: 30, marginLeft: 14 }}>‹</Text>
+  ),
+  headerRight: () =>
+    rightAction ? (
+      <TouchableOpacity activeOpacity={0.8} style={{ marginRight: 16 }}>
+        {rightAction}
+      </TouchableOpacity>
+    ) : null,
+});
+
 export const AppNavigator: React.FC = () => {
   return (
-    <Stack.Navigator
-      screenOptions={{
-        headerShown: false,
-        cardStyle: { backgroundColor: '#0D1B2A' },
-        cardStyleInterpolator: CardStyleInterpolators.forHorizontalIOS,
-        gestureEnabled: true,
-        gestureDirection: 'horizontal',
-      }}
-    >
-      <Stack.Screen name="MainTabs" component={MainTabsScreen} />
-      <Stack.Screen
-        name="Enrolment"
-        component={EnrolmentScreen}
-        options={{
-          cardStyleInterpolator: CardStyleInterpolators.forVerticalIOS,
+    <NavigationContainer>
+      <Stack.Navigator
+        initialRouteName="Home"
+        screenOptions={{
+          cardStyle: { backgroundColor: Colors.ui.background },
+          cardStyleInterpolator: CardStyleInterpolators.forHorizontalIOS,
+          gestureEnabled: true,
+          gestureDirection: 'horizontal',
         }}
-      />
-      <Stack.Screen
-        name="Recognition"
-        component={RecognitionScreen}
-        options={{
-          cardStyleInterpolator: CardStyleInterpolators.forFadeFromBottomAndroid,
-        }}
-      />
-      <Stack.Screen name="SyncStatus" component={SyncStatusScreen} />
-    </Stack.Navigator>
+      >
+        <Stack.Screen name="Home" component={HomeScreen} options={{ headerShown: false }} />
+        <Stack.Screen
+          name="Enrolment"
+          component={EnrolmentScreen}
+          options={{
+            ...customHeaderOptions('Enrol New Staff'),
+            presentation: 'modal',
+            cardStyleInterpolator: CardStyleInterpolators.forVerticalIOS,
+          }}
+        />
+        <Stack.Screen
+          name="Recognition"
+          component={RecognitionScreen}
+          options={{
+            headerShown: false,
+            presentation: 'modal',
+            cardStyleInterpolator: CardStyleInterpolators.forFadeFromBottomAndroid,
+          }}
+        />
+        <Stack.Screen
+          name="AttendanceLog"
+          component={AttendanceLogScreen}
+          options={customHeaderOptions('Attendance Log')}
+        />
+        <Stack.Screen
+          name="Admin"
+          component={AdminScreen}
+          options={customHeaderOptions('Admin Dashboard')}
+        />
+        <Stack.Screen
+          name="SyncStatus"
+          component={SyncStatusScreen}
+          options={customHeaderOptions('Sync Status')}
+        />
+      </Stack.Navigator>
+    </NavigationContainer>
   );
 };
 

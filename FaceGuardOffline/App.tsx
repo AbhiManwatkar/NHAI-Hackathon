@@ -13,7 +13,7 @@ import React from 'react';
 import { StatusBar, StyleSheet, LogBox } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import AppNavigator from '@navigation/AppNavigator';
+import AppBootstrap from './src/providers/AppBootstrap';
 
 /**
  * Suppress known warnings from third-party libraries in development.
@@ -35,7 +35,7 @@ const App: React.FC = () => {
     <GestureHandlerRootView style={styles.root}>
       <SafeAreaProvider>
         <StatusBar barStyle="light-content" backgroundColor="#0D1B2A" translucent={false} />
-        <AppNavigator />
+        <AppBootstrap />
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

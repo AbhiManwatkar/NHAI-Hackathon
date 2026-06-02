@@ -1,4 +1,4 @@
-import { AppState, AppStateStatus } from 'react-native';
+import { AppState, AppStateStatus, DeviceEventEmitter } from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
 import BackgroundFetch from 'react-native-background-fetch';
 import { SyncQueue } from './SyncQueue';
@@ -14,12 +14,13 @@ export interface SyncResult {
 
 export class SyncManager {
   private static instance: SyncManager | null = null;
-  
+
   private queue = new SyncQueue();
   private uploader = new AWSUploader();
   private purgeManager = new PurgeManager();
-  
+
   private isSyncing = false;
+  private isInitialized = false;
   private lastSyncTime: Date | null = null;
 
   private constructor() {}
@@ -32,26 +33,35 @@ export class SyncManager {
   }
 
   init(): void {
+    if (this.isInitialized) {
+      return;
+    }
+    this.isInitialized = true;
+
     // 1. Listen for connectivity restores
-    NetInfo.addEventListener(state => {
+    NetInfo.addEventListener((state) => {
       if (state.isConnected) {
         this.triggerSync('CONNECTIVITY_RESTORED');
       }
     });
 
     // 2. Configure periodic background fetch (15 mins)
-    BackgroundFetch.configure({
-      minimumFetchInterval: 15,
-      stopOnTerminate: false,
-      enableHeadless: true,
-      startOnBoot: true,
-    }, async (taskId) => {
-      console.log('[SyncManager] BackgroundFetch executing');
-      await this.triggerSync('BACKGROUND_FETCH');
-      BackgroundFetch.finish(taskId);
-    }, (error) => {
-      console.warn('[SyncManager] BackgroundFetch failed to configure:', error);
-    });
+    BackgroundFetch.configure(
+      {
+        minimumFetchInterval: 15,
+        stopOnTerminate: false,
+        enableHeadless: true,
+        startOnBoot: true,
+      },
+      async (taskId) => {
+        console.log('[SyncManager] BackgroundFetch executing');
+        await this.triggerSync('BACKGROUND_FETCH');
+        BackgroundFetch.finish(taskId);
+      },
+      (error) => {
+        console.warn('[SyncManager] BackgroundFetch failed to configure:', error);
+      },
+    );
 
     // 3. Listen for app foreground events
     AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
@@ -84,7 +94,7 @@ export class SyncManager {
         return { successCount: 0, failedCount: 0 };
       }
 
-      const ids = batch.map(r => r.id);
+      const ids = batch.map((r) => r.id);
 
       // Step 3: Mark batch as syncing
       await this.queue.markBatchSyncing(ids);
@@ -111,16 +121,20 @@ export class SyncManager {
 
       this.lastSyncTime = new Date();
       this.isSyncing = false;
+      DeviceEventEmitter.emit('faceguard:sync-complete', {
+        reason,
+        successCount: uploadRes.success.length,
+        failedCount: uploadRes.failed.length,
+      });
       return {
         successCount: uploadRes.success.length,
         failedCount: uploadRes.failed.length,
       };
-
     } catch (err) {
       console.error('[SyncManager] Trigger sync error:', err);
       // Reset stuck syncing logs to LOCAL so they don't lock
       const batch = await this.queue.getUnsyncedBatch(50);
-      const ids = batch.map(r => r.id);
+      const ids = batch.map((r) => r.id);
       await this.queue.markBatchFailed(ids);
       this.isSyncing = false;
       return { successCount: 0, failedCount: ids.length };
