@@ -1,0 +1,41 @@
+{
+  "expo": {
+    "name": "FaceGuard Offline",
+    "slug": "FaceGuardMobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "scheme": "faceguard",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.faceguard.offline",
+      "infoPlist": {
+        "NSCameraUsageDescription": "FaceGuard needs camera access for biometric face recognition"
+      }
+    },
+    "android": {
+      "package": "com.faceguard.offline",
+      "adaptiveIcon": {
+        "backgroundColor": "#0B0F19",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "permissions": [
+        "CAMERA"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "FaceGuard needs camera access for biometric face recognition"
+        }
+      ]
+    ]
+  }
+}
